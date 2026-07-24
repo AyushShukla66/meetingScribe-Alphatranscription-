@@ -1,0 +1,180 @@
+import sounddevice as sd
+import soundfile as sf
+
+from datetime import datetime
+from pathlib import Path
+
+from models.meeting import Meeting
+from services.logger import logger
+
+
+current_meeting = None
+recording = None
+samplerate = None
+device_id = None
+
+Path("temp").mkdir(exist_ok=True)
+
+
+def get_best_microphone():
+    """
+    Automatically finds the best available microphone.
+
+    Priority:
+    1. USB Microphone
+    2. Bluetooth Headset
+    3. Default Microphone
+    """
+
+    devices = sd.query_devices()
+
+    usb = None
+    bluetooth = None
+    default = None
+
+    for i, dev in enumerate(devices):
+
+        if dev["max_input_channels"] <= 0:
+            continue
+
+        name = dev["name"].lower()
+
+        if default is None:
+            default = i
+
+        if usb is None and ("usb" in name or "microphone" in name):
+            usb = i
+
+        if bluetooth is None and (
+            "bluetooth" in name
+            or "headset" in name
+            or "hands-free" in name
+        ):
+            bluetooth = i
+
+    selected = usb or bluetooth or default
+
+    if selected is None:
+        raise Exception("No microphone found.")
+
+    device = sd.query_devices(selected)
+
+    info = {
+        "id": selected,
+        "name": device["name"],
+        "channels": max(1, min(device["max_input_channels"], 2)),
+        "samplerate": int(device["default_samplerate"]),
+    }
+
+    print("\n==============================")
+    print("Microphone Selected")
+    print("==============================")
+    print("Name       :", info["name"])
+    print("Device ID  :", info["id"])
+    print("Channels   :", info["channels"])
+    print("SampleRate :", info["samplerate"])
+    print("==============================\n")
+
+    return info
+
+
+def start_meeting(name):
+
+    global current_meeting
+    global recording
+    global samplerate
+    global device_id
+
+    current_meeting = Meeting(
+        name=name,
+        start_time=datetime.now()
+    )
+
+    mic = get_best_microphone()
+
+    device_id = mic["id"]
+    samplerate = mic["samplerate"]
+
+    devices = sd.query_devices()
+
+    # Try selected microphone first
+    devices_to_try = [device_id]
+
+    # Add all remaining microphones as backups
+    for i, dev in enumerate(devices):
+        if (
+            dev["max_input_channels"] > 0
+            and i not in devices_to_try
+        ):
+            devices_to_try.append(i)
+
+    recording = None
+
+    for dev_id in devices_to_try:
+
+        try:
+
+            dev = sd.query_devices(dev_id)
+
+            channels = max(
+                1,
+                min(dev["max_input_channels"], 2)
+            )
+
+            samplerate = int(dev["default_samplerate"])
+
+            print(f"Trying microphone: {dev['name']}")
+
+            recording = sd.rec(
+    frames=int(8 * 60 * 60 * samplerate),
+    samplerate=samplerate,
+    channels=channels,
+    dtype="int16",
+    device=dev_id,
+    blocking=False
+)
+
+            device_id = dev_id
+
+            print("\nRecording Started Successfully")
+            print("Using:", dev["name"])
+            logger.info(f"Recording started using {dev['name']}")
+
+            break
+
+        except Exception as e:
+
+            print(f"Failed: {dev['name']}")
+            print(e)
+
+    if recording is None:
+        raise Exception(
+            "Could not open any microphone."
+        )
+
+    logger.info(f"Meeting Started : {name}")
+
+    return current_meeting
+
+
+def stop_meeting():
+
+    global current_meeting
+    global recording
+    global samplerate
+
+    sd.stop()
+
+    if recording is not None:
+
+        sf.write(
+            "temp/meeting.wav",
+            recording,
+            samplerate
+        )
+
+    current_meeting.end_time = datetime.now()
+
+    logger.info("Meeting Stopped")
+
+    return current_meeting
