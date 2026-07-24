@@ -467,3 +467,463 @@ python -c "import sounddevice as sd; print(sd.query_devices())"
 ```
 
 Then I will tell you exactly which device ID to use in your `audio_capture.py`.
+
+
+Error Troubleshooting In Scripting 
+
+I understand. You want the **complete step-by-step history from the beginning** — the same way we solved the errors in MeetingScribe — including **what error happened, why it happened, and what we changed to fix it**.
+
+Here is the complete troubleshooting path:
+
+---
+
+# MeetingScribe Complete Setup & Error Resolution Steps
+
+## 1. Initial Error: FFmpeg Not Found
+
+### Error:
+
+```
+FileNotFoundError: [WinError 2]
+The system cannot find the file specified
+```
+
+and:
+
+```
+ffmpeg : The term 'ffmpeg' is not recognized
+```
+
+### Reason:
+
+Your code used:
+
+```python
+pydub
+```
+
+to convert WAV → MP3.
+
+`pydub` requires FFmpeg, but Windows could not find it.
+
+---
+
+## Solution:
+
+Install FFmpeg:
+
+```powershell
+winget install Gyan.FFmpeg
+```
+
+Verify:
+
+```powershell
+winget list ffmpeg
+```
+
+Output:
+
+```
+FFmpeg Gyan.FFmpeg 8.1.2
+```
+
+Find location:
+
+```powershell
+Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter ffmpeg.exe
+```
+
+You found:
+
+```
+C:\Users\finoadmin\AppData\Local\Microsoft\WinGet\Packages\
+Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\
+ffmpeg-8.1.2-full_build\bin\ffmpeg.exe
+```
+
+Added this in:
+
+```
+transcription.py
+```
+
+Code:
+
+```python
+AudioSegment.converter = r"YOUR_FFMPEG_PATH\ffmpeg.exe"
+```
+
+---
+
+# 2. FFmpeg Encoding Error
+
+### Error:
+
+```
+pydub.exceptions.CouldntEncodeError
+
+ffmpeg returned error code:255
+```
+
+### Reason:
+
+FFmpeg was installed, but your recording was creating very large files:
+
+Example:
+
+```
+Original size: 4844.97 MB
+Audio length: 405 minutes
+```
+
+Your code was recording:
+
+```python
+frames=int(8 * 60 * 60 * samplerate)
+```
+
+Meaning:
+
+8 hours reserved.
+
+It recorded:
+
+* silence
+* background noise
+* empty time
+
+---
+
+# 3. Problem: Huge Audio Files
+
+You said:
+
+> I don't want it to generate chunks. I only want clear audio. When someone speaks, only that time should record.
+
+The old method:
+
+```
+Record everything
+        ↓
+Save huge WAV
+        ↓
+Split chunks
+        ↓
+Transcribe
+```
+
+was changed.
+
+New method:
+
+```
+Start recording
+        ↓
+Collect audio live
+        ↓
+Stop recording
+        ↓
+Save only actual meeting audio
+        ↓
+Transcribe
+```
+
+---
+
+# 4. Updated audio_capture.py
+
+Changed from:
+
+```python
+sd.rec()
+```
+
+to:
+
+```python
+sd.InputStream()
+```
+
+Reason:
+
+`sd.rec()` reserves memory for the complete recording.
+
+`InputStream()` records continuously in small pieces.
+
+---
+
+New flow:
+
+```
+Microphone
+     |
+     ↓
+audio_callback()
+     |
+     ↓
+recording list
+     |
+     ↓
+stop_meeting()
+     |
+     ↓
+meeting.wav
+```
+
+---
+
+# 5. Microphone Error
+
+### Error:
+
+```
+Exception: Could not open any microphone
+```
+
+### Reason:
+
+Your microphone device selection was not stable.
+
+Old code selected:
+
+```
+USB / Bluetooth / default
+```
+
+but Windows changed device IDs.
+
+---
+
+Solution:
+
+Changed microphone detection:
+
+```python
+sd.query_devices()
+```
+
+and selected:
+
+```
+max_input_channels > 0
+```
+
+Now it detects:
+
+Example:
+
+```
+Name:
+Microsoft Sound Mapper - Input
+
+Channels:
+2
+
+SampleRate:
+44100
+```
+
+---
+
+# 6. OpenAI Client Error
+
+### Error:
+
+```
+NameError:
+name 'client' is not defined
+```
+
+File:
+
+```
+ai_engine.py
+```
+
+Reason:
+
+You used:
+
+```python
+client.chat.completions.create()
+```
+
+but never created:
+
+```python
+client = OpenAI()
+```
+
+---
+
+Solution:
+
+Added:
+
+```python
+from openai import OpenAI
+from config.settings import OPENAI_API_KEY
+
+
+client = OpenAI(
+    api_key=OPENAI_API_KEY
+)
+```
+
+---
+
+# 7. Transcript Generated in Wrong Language
+
+### Problem:
+
+Output:
+
+```
+䭐Ѓ 晦峸劭醥...
+```
+
+or:
+
+Chinese-like characters.
+
+---
+
+Reason:
+
+DOCX was opened incorrectly OR Whisper was not forced correctly.
+
+---
+
+Solution:
+
+Changed transcription:
+
+Before:
+
+```python
+model="whisper-1"
+```
+
+After:
+
+```python
+result = client.audio.transcriptions.create(
+    model="whisper-1",
+    file=file,
+    language="en"
+)
+```
+
+---
+
+# 8. Wrong AI Summary Format
+
+Old output:
+
+```
+Executive Summary
+
+Decisions
+
+Action Items
+```
+
+You wanted:
+
+```
+Whatever person speaks,
+write exactly the same words.
+```
+
+Example:
+
+Speaker says:
+
+```
+दिल जलों का दिल जला के क्या मिलेगा मेहरमा
+I want to check the mic properly
+मैंको स्क्रिप्टिंग भी टेस्ट करनी है
+```
+
+Transcript should be:
+
+```
+दिल जलों का दिल जला के क्या मिलेगा मेहरमा
+
+I want to check the mic properly
+
+मैंको स्क्रिप्टिंग भी टेस्ट करनी है
+```
+
+No rewriting.
+No summary.
+No translation.
+
+---
+
+# 9. Report File Generation
+
+Your final flow became:
+
+```
+audio_capture.py
+
+        ↓
+
+temp/meeting.wav
+
+        ↓
+
+transcription.py
+
+        ↓
+
+Whisper
+
+        ↓
+
+report_generator.py
+
+        ↓
+
+Meeting_Name.docx
+```
+
+---
+
+# 10. Current Working Status
+
+Now your system can:
+
+✅ Record microphone
+✅ Stop recording
+✅ Convert audio
+✅ Send to Whisper
+✅ Keep Hindi + English mixed words
+✅ Generate transcript
+✅ Create DOCX report
+
+---
+
+# Next Development Stage
+
+Your next requirement:
+
+> "Join Google Meet / Teams / Zoom and automatically create meeting transcript"
+
+That requires adding:
+
+```
+System audio capture
++
+Microphone capture
++
+Speaker identification
+```
+
+It is the next phase after your current working version.
+
+---
+
+Keep this as your **MeetingScribe troubleshooting document**. It describes the exact journey from the first FFmpeg problem to your current working transcript system.
