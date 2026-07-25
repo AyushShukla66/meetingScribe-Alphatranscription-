@@ -5,6 +5,7 @@ from openai import OpenAI
 from config.settings import OPENAI_API_KEY
 
 from services.transcription import transcribe_audio
+from services.transcript_cleaner import clean_transcript
 
 
 client = OpenAI(
@@ -18,7 +19,9 @@ def generate_report(meeting):
 
 
     # Create reports folder
-    Path("reports").mkdir(exist_ok=True)
+    Path("reports").mkdir(
+        exist_ok=True
+    )
 
 
 
@@ -27,20 +30,48 @@ def generate_report(meeting):
     )
 
 
-    # Get exact Hinglish transcript
-    transcript = transcribe_audio(
+    # Step 1:
+    # Get Hinglish transcript from audio
+
+    raw_transcript = transcribe_audio(
         "temp/meeting.wav"
     )
 
 
     print(
-        "======== TRANSCRIPT ========"
+        "======== RAW TRANSCRIPT ========"
+    )
+
+    print(raw_transcript)
+
+    print(
+        "================================"
+    )
+
+
+
+    print(
+        "Cleaning transcript..."
+    )
+
+
+    # Step 2:
+    # Clean Hinglish transcript
+    # No translation
+
+    transcript = clean_transcript(
+        raw_transcript
+    )
+
+
+    print(
+        "======== CLEAN TRANSCRIPT ========"
     )
 
     print(transcript)
 
     print(
-        "============================"
+        "=================================="
     )
 
 
@@ -50,47 +81,67 @@ def generate_report(meeting):
     )
 
 
-    # Generate meeting report
+
+    # Step 3:
+    # Generate English meeting report
+
     report_response = client.chat.completions.create(
+
 
         model="gpt-4o-mini",
 
+
         messages=[
 
+
             {
+
                 "role": "system",
 
                 "content": """
 
-                You are a professional meeting report generator.
+You are a professional corporate meeting report generator.
 
-                Create a structured meeting report from the transcript.
+Create a structured meeting report from the Hinglish transcript.
 
-                Generate only:
+Generate only:
 
-                1. Meeting Topic
-                2. Key Points
-                3. Action Items
+1. Meeting Topic
 
-                Rules:
-                - Write the report in English.
-                - Do not include the transcript in the summary.
-                - Do not change technical terms.
-                - Keep API, software names, company names unchanged.
+2. Key Discussion Points
 
-                """
+3. Decisions Made
+
+4. Action Items
+
+
+Rules:
+
+- Write the report in professional English.
+- Do not include the transcript.
+- Do not translate the transcript section.
+- Only summarize the meeting content.
+- Do not add information that was not discussed.
+- Keep technical terms unchanged.
+- Keep API names, software names, company names, and product names unchanged.
+
+"""
+
             },
 
 
             {
+
                 "role": "user",
 
                 "content": transcript
+
             }
 
         ]
 
     )
+
 
 
     meeting_report = (
@@ -102,7 +153,9 @@ def generate_report(meeting):
 
 
 
-    # Create Word document
+    # Step 4:
+    # Create DOCX file
+
 
     doc = Document()
 
@@ -138,7 +191,7 @@ def generate_report(meeting):
 
 
 
-    # AI Generated Report
+    # English Summary
 
     doc.add_heading(
         "Summary",
@@ -152,10 +205,10 @@ def generate_report(meeting):
 
 
 
-    # Original Transcript
+    # Hinglish Transcript
 
     doc.add_heading(
-        "Original Meeting Transcript",
+        "Meeting Transcript",
         level=2
     )
 
@@ -166,7 +219,7 @@ def generate_report(meeting):
 
 
 
-    # Save DOCX
+    # Save file
 
     filename = (
         f"reports/{meeting.name}.docx"
