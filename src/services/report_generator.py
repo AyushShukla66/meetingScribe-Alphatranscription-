@@ -1,28 +1,111 @@
 from pathlib import Path
 from docx import Document
 
+from openai import OpenAI
+from config.settings import OPENAI_API_KEY
+
 from services.transcription import transcribe_audio
 
 
+client = OpenAI(
+    api_key=OPENAI_API_KEY,
+    timeout=300.0
+)
+
+
+
 def generate_report(meeting):
+
 
     # Create reports folder
     Path("reports").mkdir(exist_ok=True)
 
 
-    # Get transcript
+
+    print(
+        "Generating transcript..."
+    )
+
+
+    # Get exact Hinglish transcript
     transcript = transcribe_audio(
         "temp/meeting.wav"
     )
 
 
-    print("======== TRANSCRIPT ========")
+    print(
+        "======== TRANSCRIPT ========"
+    )
+
     print(transcript)
-    print("============================")
+
+    print(
+        "============================"
+    )
 
 
-    # Create Word file
+
+    print(
+        "Generating meeting summary..."
+    )
+
+
+    # Generate meeting report
+    report_response = client.chat.completions.create(
+
+        model="gpt-4o-mini",
+
+        messages=[
+
+            {
+                "role": "system",
+
+                "content": """
+
+                You are a professional meeting report generator.
+
+                Create a structured meeting report from the transcript.
+
+                Generate only:
+
+                1. Meeting Topic
+                2. Key Points
+                3. Action Items
+
+                Rules:
+                - Write the report in English.
+                - Do not include the transcript in the summary.
+                - Do not change technical terms.
+                - Keep API, software names, company names unchanged.
+
+                """
+            },
+
+
+            {
+                "role": "user",
+
+                "content": transcript
+            }
+
+        ]
+
+    )
+
+
+    meeting_report = (
+        report_response
+        .choices[0]
+        .message
+        .content
+    )
+
+
+
+    # Create Word document
+
     doc = Document()
+
 
 
     doc.add_heading(
@@ -30,10 +113,13 @@ def generate_report(meeting):
         level=1
     )
 
+
+
     doc.add_heading(
-        "Meeting Transcript",
+        "Meeting Report",
         level=2
     )
+
 
 
     doc.add_paragraph(
@@ -51,31 +137,52 @@ def generate_report(meeting):
     )
 
 
+
+    # AI Generated Report
+
     doc.add_heading(
-        "Transcript",
+        "Summary",
         level=2
     )
 
 
-    # Add exact speech text
+    doc.add_paragraph(
+        meeting_report
+    )
+
+
+
+    # Original Transcript
+
+    doc.add_heading(
+        "Original Meeting Transcript",
+        level=2
+    )
+
+
     doc.add_paragraph(
         transcript
     )
 
 
-    # Save file
+
+    # Save DOCX
+
     filename = (
         f"reports/{meeting.name}.docx"
     )
 
 
+
     doc.save(filename)
+
 
 
     print(
         "DOCX FILE CREATED:",
         Path(filename).absolute()
     )
+
 
 
     return filename

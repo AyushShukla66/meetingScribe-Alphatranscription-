@@ -36,7 +36,7 @@ def transcribe_audio(audio_file):
 
 
     print(
-        "Uploading audio for English transcription..."
+        "Uploading audio for exact Hinglish transcription..."
     )
 
 
@@ -46,9 +46,43 @@ def transcribe_audio(audio_file):
 
             with open(audio_file, "rb") as file:
 
+
                 result = client.audio.transcriptions.create(
+
                     model="whisper-1",
+
                     file=file,
+
+                    prompt="""
+                    Transcribe the audio exactly as spoken.
+
+                    Follow these rules strictly:
+
+                    - Keep the same language style used by the speaker.
+                    - Do not translate Hindi words into English.
+                    - Do not translate English words into Hindi.
+                    - Do not convert Roman Hindi into Devanagari Hindi.
+                    - Keep Hindi words in Roman Hindi.
+                    - Keep English words exactly as English.
+                    - Keep technical words unchanged.
+                    - Keep API, software names, company names,
+                      product names, and English terms unchanged.
+                    - Do not summarize.
+                    - Do not improve grammar.
+                    - Do not rewrite sentences.
+                    - Do not remove any words.
+
+                    Example:
+
+                    Spoken:
+                    "Aaj meeting ke andar hum API integration discuss karenge
+                    aur deployment ka flow dekhenge."
+
+                    Correct transcript:
+                    "Aaj meeting ke andar hum API integration discuss karenge
+                    aur deployment ka flow dekhenge."
+
+                    """
                 )
 
 
@@ -58,6 +92,7 @@ def transcribe_audio(audio_file):
 
 
             return result.text
+
 
 
         except Exception as e:
@@ -70,6 +105,7 @@ def transcribe_audio(audio_file):
             print(e)
 
             time.sleep(5)
+
 
 
     raise Exception(
