@@ -15,17 +15,10 @@ client = OpenAI(
 def transcribe_audio(audio_file):
 
     if not os.path.exists(audio_file):
-
-        raise FileNotFoundError(
-            audio_file
-        )
+        raise FileNotFoundError(audio_file)
 
 
-    size_mb = (
-        os.path.getsize(audio_file)
-        /
-        (1024 * 1024)
-    )
+    size_mb = os.path.getsize(audio_file) / (1024 * 1024)
 
 
     print(
@@ -36,7 +29,7 @@ def transcribe_audio(audio_file):
 
 
     print(
-        "Uploading audio for exact Hinglish transcription..."
+        "Uploading audio for transcription..."
     )
 
 
@@ -49,40 +42,55 @@ def transcribe_audio(audio_file):
 
                 result = client.audio.transcriptions.create(
 
-                    model="whisper-1",
+                    model="gpt-4o-transcribe",
 
                     file=file,
 
+
                     prompt="""
-                    Transcribe the audio exactly as spoken.
 
-                    Follow these rules strictly:
+This is a professional business meeting recording.
 
-                    - Keep the same language style used by the speaker.
-                    - Do not translate Hindi words into English.
-                    - Do not translate English words into Hindi.
-                    - Do not convert Roman Hindi into Devanagari Hindi.
-                    - Keep Hindi words in Roman Hindi.
-                    - Keep English words exactly as English.
-                    - Keep technical words unchanged.
-                    - Keep API, software names, company names,
-                      product names, and English terms unchanged.
-                    - Do not summarize.
-                    - Do not improve grammar.
-                    - Do not rewrite sentences.
-                    - Do not remove any words.
+Transcribe the audio accurately.
 
-                    Example:
+Important rules:
 
-                    Spoken:
-                    "Aaj meeting ke andar hum API integration discuss karenge
-                    aur deployment ka flow dekhenge."
+- Preserve Hindi, English, and Hinglish exactly.
+- Do not translate languages.
+- Do not summarize.
+- Do not rewrite sentences.
+- Do not add extra information.
+- Remove obvious Whisper mistakes.
+- Keep technical terms unchanged.
 
-                    Correct transcript:
-                    "Aaj meeting ke andar hum API integration discuss karenge
-                    aur deployment ka flow dekhenge."
+Keep these words exactly if spoken:
 
-                    """
+API
+Backend
+Frontend
+Deployment
+Database
+Server
+Authentication
+OpenAI
+Python
+Software names
+Company names
+Product names
+
+
+The output should be a clean readable transcript.
+
+Example:
+
+Audio:
+"humko is tool ke baare mein discuss karna hai ki organization mein deploy karna hai ya nahi"
+
+Output:
+"humko is tool ke baare mein discuss karna hai ki organization mein deploy karna hai ya nahi"
+
+"""
+
                 )
 
 
@@ -97,17 +105,20 @@ def transcribe_audio(audio_file):
 
         except Exception as e:
 
+
             print(
                 "Transcription attempt failed:",
                 attempt + 1
             )
 
+
             print(e)
+
 
             time.sleep(5)
 
 
 
     raise Exception(
-        "Transcription failed after retries"
+        "Transcription failed after retries."
     )
