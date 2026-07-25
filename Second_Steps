@@ -1,0 +1,166 @@
+Yes, this is the next big step for MeetingScribe. What you want is:
+
+> "I join an online meeting (Google Meet / Microsoft Teams / Zoom), and MeetingScribe should listen to the meeting and create a transcript, preferably identifying who is speaking."
+
+This is possible, but it requires a different approach from your current microphone recording.
+
+Your current system:
+
+```
+Laptop Microphone
+        ↓
+audio_capture.py
+        ↓
+meeting.wav
+        ↓
+Whisper
+        ↓
+Transcript.docx
+```
+
+This only captures **your microphone**.
+
+For online meetings, you need to capture the **meeting audio output** (other participants' voices) and optionally your microphone.
+
+---
+
+## Option 1 (Easiest): Capture system audio + microphone
+
+Your flow becomes:
+
+```
+Google Meet / Teams / Zoom
+          ↓
+     Computer Speaker
+          ↓
+   System Audio Capture
+          +
+     Your Microphone
+          ↓
+      Whisper
+          ↓
+   Meeting Transcript
+```
+
+You can record:
+
+* Other people's voices ✅
+* Your voice ✅
+* Hindi + English mix ✅
+
+On Windows, this is usually done using:
+
+* WASAPI loopback audio
+* Stereo Mix
+* Virtual audio cable
+
+---
+
+## Option 2 (Better): Join meeting as a bot
+
+Example:
+
+```
+Google Meet
+      ↑
+MeetingScribe Bot joins
+      ↓
+Records meeting audio
+      ↓
+Whisper transcription
+      ↓
+Speaker-wise transcript
+```
+
+Output:
+
+```
+10:02 AM
+
+Raj:
+Today we will discuss the sales target.
+
+Amit:
+Yes, last month's numbers were lower.
+
+Raj:
+We need a new strategy.
+```
+
+This requires integration with:
+
+* Google Meet APIs
+* Microsoft Teams APIs
+* Zoom SDK/API
+
+This is more advanced.
+
+---
+
+## For your current project, I suggest this path:
+
+### Phase 1 (quick improvement)
+
+Add system audio recording.
+
+Your folder becomes:
+
+```
+services
+│
+├── audio_capture.py       (your microphone)
+├── system_audio.py        (meeting audio)
+├── transcription.py
+└── report_generator.py
+```
+
+Then:
+
+```
+Meeting audio + Your voice
+             ↓
+          Whisper
+             ↓
+       DOCX Transcript
+```
+
+---
+
+### Phase 2
+
+Add speaker names:
+
+Example:
+
+```
+Speaker A:
+Good morning everyone.
+
+Speaker B:
+Good morning.
+
+Speaker A:
+Let's start the discussion.
+```
+
+This uses speaker diarization technology.
+
+Possible tools:
+
+* WhisperX
+* Pyannote Audio
+* AssemblyAI
+* Deepgram
+
+---
+
+Before changing your code, I need to know one thing:
+
+Which meeting platform do you want MeetingScribe to work with first?
+
+1. Google Meet
+2. Microsoft Teams
+3. Zoom
+4. Any meeting running on your laptop (capture everything)
+
+The solution will be different depending on your answer.
