@@ -1,4 +1,5 @@
 from openai import OpenAI
+
 from config.settings import OPENAI_API_KEY
 
 
@@ -8,19 +9,36 @@ client = OpenAI(
 )
 
 
-
 def generate_executive_brief(transcript):
+    """
+    Generate executive meeting brief from transcript.
+    This function only creates summary.
+    It does not modify the original transcript.
+    """
 
-    prompt = f"""
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": """
 You are an Executive Assistant.
 
-Generate the report in English only.
+Your task is ONLY to create an executive meeting brief.
 
-Do not change the transcript.
-Do not translate the transcript.
-Do not summarize the transcript.
+The input transcript is an original voice transcript.
 
-Create:
+IMPORTANT:
+
+- Never rewrite the transcript.
+- Never clean the transcript.
+- Never correct words.
+- Never translate the transcript.
+- Never change the meaning of spoken sentences.
+- Use the transcript only as information for creating a summary.
+
+Generate only these sections:
 
 1. Executive Summary
 2. Decisions
@@ -28,21 +46,36 @@ Create:
 4. Risks
 5. Director Attention
 
-Use this transcript:
 
-{transcript}
+Rules:
+
+- Write the output in professional English.
+- Use only information discussed in the meeting.
+- Do not invent information.
+- Do not add assumptions.
+- Do not include the full transcript.
+- Keep technical terms unchanged.
+- Keep API names unchanged.
+- Keep software names unchanged.
+- Keep company names unchanged.
+- Keep product names unchanged.
+- Keep important numbers, dates, and names unchanged.
 """
-
-
-    response = client.chat.completions.create(
-        model="gpt-5",
-        messages=[
+            },
             {
                 "role": "user",
-                "content": prompt
+                "content": transcript
             }
         ]
     )
 
 
-    return response.choices[0].message.content
+    executive_brief = (
+        response
+        .choices[0]
+        .message
+        .content
+    )
+
+
+    return executive_brief

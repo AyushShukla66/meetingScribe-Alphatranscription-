@@ -20,6 +20,7 @@ device_id = None
 channels = None
 
 
+# Create temp directory if it does not exist
 Path("temp").mkdir(
     exist_ok=True
 )
@@ -27,17 +28,14 @@ Path("temp").mkdir(
 
 def get_best_microphone():
     """
-    Detect microphone and find a supported sample rate.
+    Detect and return the first available microphone device.
     """
-
 
     devices = sd.query_devices()
 
     selected = None
 
-
     print("\nAvailable Microphones:")
-
 
     for i, dev in enumerate(devices):
 
@@ -53,13 +51,10 @@ def get_best_microphone():
                 selected = i
 
 
-
     if selected is None:
-
         raise Exception(
             "No microphone found."
         )
-
 
 
     device = sd.query_devices(
@@ -67,121 +62,52 @@ def get_best_microphone():
     )
 
 
-
-    max_channels = device["max_input_channels"]
-
-
-    # Try safe channel count
-
-    selected_channels = min(
-        max_channels,
-        2
-    )
-
-
-    # Find supported sample rate
-
-    possible_rates = [
-        int(device["default_samplerate"]),
-        48000,
-        44100,
-        32000,
-        16000
-    ]
-
-
-    working_rate = None
-
-
-    for rate in possible_rates:
-
-        try:
-
-            sd.check_input_settings(
-                device=selected,
-                channels=selected_channels,
-                samplerate=rate,
-                dtype="int16"
-            )
-
-
-            working_rate = rate
-
-            break
-
-
-        except Exception:
-
-            continue
-
-
-
-    if working_rate is None:
-
-        raise Exception(
-            "No supported microphone sample rate found."
-        )
-
-
-
     info = {
-
         "id": selected,
-
         "name": device["name"],
-
-        "channels": selected_channels,
-
-        "samplerate": working_rate
-
+        "channels": min(
+            device["max_input_channels"],
+            2
+        ),
+        "samplerate": int(
+            device["default_samplerate"]
+        ),
     }
-
 
 
     print("\n==============================")
     print("Microphone Selected")
     print("==============================")
-
     print(
         "Name:",
         info["name"]
     )
-
     print(
         "Device ID:",
         info["id"]
     )
-
     print(
         "Channels:",
         info["channels"]
     )
-
     print(
         "SampleRate:",
         info["samplerate"]
     )
-
     print("==============================\n")
-
 
 
     return info
 
 
 
-
-
 def audio_callback(indata, frames, time, status):
     """
-    Receive audio chunks.
+    Receive audio data chunks.
     """
 
     if status:
-
-        print(
-            status
-        )
+        print(status)
 
 
     recording.append(
@@ -190,11 +116,9 @@ def audio_callback(indata, frames, time, status):
 
 
 
-
-
 def start_meeting(name):
     """
-    Start meeting recording.
+    Start meeting audio recording.
     """
 
     global current_meeting
@@ -204,8 +128,8 @@ def start_meeting(name):
     global channels
 
 
+    # Clear previous audio data
     recording.clear()
-
 
 
     current_meeting = Meeting(
@@ -214,46 +138,31 @@ def start_meeting(name):
     )
 
 
-
     mic = get_best_microphone()
 
 
-
     device_id = mic["id"]
-
     samplerate = mic["samplerate"]
-
     channels = mic["channels"]
-
 
 
     try:
 
-
         stream = sd.InputStream(
-
             device=device_id,
-
             samplerate=samplerate,
-
             channels=channels,
-
             dtype="int16",
-
             callback=audio_callback
-
         )
-
 
 
         stream.start()
 
 
-
         print(
             "Recording Started Successfully"
         )
-
 
         print(
             "Using:",
@@ -266,17 +175,13 @@ def start_meeting(name):
         )
 
 
-
     except Exception as e:
-
 
         print(
             "Microphone error:"
         )
 
-
         print(e)
-
 
 
         raise Exception(
@@ -284,23 +189,17 @@ def start_meeting(name):
         )
 
 
-
     return current_meeting
-
-
-
-
 
 
 
 def stop_meeting():
     """
-    Stop recording and save audio.
+    Stop recording and save audio file.
     """
 
     global current_meeting
     global stream
-
 
 
     if current_meeting is None:
@@ -310,17 +209,13 @@ def stop_meeting():
         )
 
 
-
     if stream:
-
 
         stream.stop()
 
         stream.close()
 
         stream = None
-
-
 
 
 
@@ -332,16 +227,15 @@ def stop_meeting():
 
 
 
-
     audio_data = np.concatenate(
         recording,
         axis=0
     )
 
 
-
-    file_path = "temp/meeting.wav"
-
+    file_path = (
+        "temp/meeting.wav"
+    )
 
 
     sf.write(
@@ -351,10 +245,7 @@ def stop_meeting():
     )
 
 
-
     current_meeting.audio_file = file_path
-
-
 
 
     duration = (
@@ -364,12 +255,10 @@ def stop_meeting():
     )
 
 
-
     print(
         "Audio saved:",
         file_path
     )
-
 
     print(
         "Audio duration:",
@@ -378,9 +267,7 @@ def stop_meeting():
     )
 
 
-
     current_meeting.end_time = datetime.now()
-
 
 
     logger.info(
@@ -388,9 +275,8 @@ def stop_meeting():
     )
 
 
-
+    # Clear old recording data
     recording.clear()
-
 
 
     return current_meeting

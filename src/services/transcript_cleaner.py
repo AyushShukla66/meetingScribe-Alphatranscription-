@@ -1,6 +1,6 @@
 from openai import OpenAI
-from config.settings import OPENAI_API_KEY
 
+from config.settings import OPENAI_API_KEY
 
 
 client = OpenAI(
@@ -9,26 +9,17 @@ client = OpenAI(
 )
 
 
-
 def clean_transcript(raw_transcript):
-
+    """
+    Clean Hinglish transcript without changing meaning.
+    """
 
     response = client.chat.completions.create(
-
         model="gpt-4o-mini",
-
-
         messages=[
-
-
             {
-
-
-                "role":"system",
-
-
-                "content":"""
-
+                "role": "system",
+                "content": """
 You are a Hinglish transcript cleaner.
 
 Your job is ONLY to clean the transcript.
@@ -43,53 +34,38 @@ Rules:
 - Do NOT make it formal.
 - Keep English technical words unchanged.
 - Remove unnecessary filler words like:
-  umm, hmm, acha, matlab (only if they do not add meaning).
+  umm, hmm, acha, matlab
+  (only if they do not add meaning).
 
 Maintain Roman Hindi style.
 
 Example:
 
 Input:
-
 humko is tool ke baare mein discuss karna hai ki humko isko organization mein deploy karna hai ya nahi.
 
 Output:
-
 humko is tool ke baare mein discuss karna hai ki humko isko organization mein deploy karna hai ya nahi.
 
 
 Another example:
 
 Input:
-
 aaj hum API integration discuss karenge aur fir deployment ka flow dekhenge.
 
 Output:
-
 aaj hum API integration discuss karenge aur fir deployment ka flow dekhenge.
 
 
 Return only cleaned Hinglish transcript.
-
 """
-
-
             },
-
-
             {
-
-
-                "role":"user",
-
+                "role": "user",
                 "content": raw_transcript
-
             }
-
         ]
-
     )
-
 
     return (
         response
