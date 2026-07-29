@@ -2,6 +2,7 @@ import sounddevice as sd
 import soundfile as sf
 import numpy as np
 
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -9,10 +10,18 @@ from models.meeting import Meeting
 from services.logger import logger
 
 
+# Current meeting object
 current_meeting = None
 
+
+# Audio storage
 recording = []
 
+# Thread lock for audio data safety
+recording_lock = threading.Lock()
+
+
+# Stream variables
 stream = None
 
 samplerate = None
@@ -20,16 +29,17 @@ device_id = None
 channels = None
 
 
+# Create temp folder
 Path("temp").mkdir(
     exist_ok=True
 )
 
 
+
 def get_best_microphone():
     """
-    Detect microphone and find a supported sample rate.
+    Detect best available microphone.
     """
-
 
     devices = sd.query_devices()
 
@@ -39,18 +49,18 @@ def get_best_microphone():
     print("\nAvailable Microphones:")
 
 
-    for i, dev in enumerate(devices):
+    for index, device in enumerate(devices):
 
-        if dev["max_input_channels"] > 0:
+        if device["max_input_channels"] > 0:
 
             print(
-                i,
+                index,
                 "-",
-                dev["name"]
+                device["name"]
             )
 
             if selected is None:
-                selected = i
+                selected = index
 
 
 
@@ -62,16 +72,13 @@ def get_best_microphone():
 
 
 
-    device = sd.query_devices(
+    device_info = sd.query_devices(
         selected
     )
 
 
+    max_channels = device_info["max_input_channels"]
 
-    max_channels = device["max_input_channels"]
-
-
-    # Try safe channel count
 
     selected_channels = min(
         max_channels,
@@ -79,10 +86,8 @@ def get_best_microphone():
     )
 
 
-    # Find supported sample rate
-
     possible_rates = [
-        int(device["default_samplerate"]),
+        int(device_info["default_samplerate"]),
         48000,
         44100,
         32000,
@@ -104,7 +109,6 @@ def get_best_microphone():
                 dtype="int16"
             )
 
-
             working_rate = rate
 
             break
@@ -119,16 +123,16 @@ def get_best_microphone():
     if working_rate is None:
 
         raise Exception(
-            "No supported microphone sample rate found."
+            "No supported sample rate found."
         )
 
 
 
-    info = {
+    return {
 
         "id": selected,
 
-        "name": device["name"],
+        "name": device_info["name"],
 
         "channels": selected_channels,
 
@@ -138,55 +142,30 @@ def get_best_microphone():
 
 
 
-    print("\n==============================")
-    print("Microphone Selected")
-    print("==============================")
-
-    print(
-        "Name:",
-        info["name"]
-    )
-
-    print(
-        "Device ID:",
-        info["id"]
-    )
-
-    print(
-        "Channels:",
-        info["channels"]
-    )
-
-    print(
-        "SampleRate:",
-        info["samplerate"]
-    )
-
-    print("==============================\n")
-
-
-
-    return info
-
-
-
 
 
 def audio_callback(indata, frames, time, status):
     """
-    Receive audio chunks.
+    Receives audio chunks from microphone.
     """
+
 
     if status:
 
         print(
+            "Audio status:",
             status
         )
 
 
-    recording.append(
-        indata.copy()
-    )
+
+    with recording_lock:
+
+        recording.append(
+            indata.copy()
+        )
+
+
 
 
 
@@ -194,8 +173,9 @@ def audio_callback(indata, frames, time, status):
 
 def start_meeting(name):
     """
-    Start meeting recording.
+    Start microphone recording.
     """
+
 
     global current_meeting
     global stream
@@ -204,7 +184,10 @@ def start_meeting(name):
     global channels
 
 
-    recording.clear()
+
+    with recording_lock:
+
+        recording.clear()
 
 
 
@@ -227,8 +210,19 @@ def start_meeting(name):
 
 
 
-    try:
+    print("\n==============================")
+    print("Microphone Selected")
+    print("==============================")
+    print("Name:", mic["name"])
+    print("Device:", device_id)
+    print("Channels:", channels)
+    print("Sample Rate:", samplerate)
+    print("==============================\n")
 
+
+
+
+    try:
 
         stream = sd.InputStream(
 
@@ -251,36 +245,26 @@ def start_meeting(name):
 
 
         print(
-            "Recording Started Successfully"
-        )
-
-
-        print(
-            "Using:",
-            mic["name"]
+            "Recording Started"
         )
 
 
         logger.info(
-            f"Recording started using {mic['name']}"
+            f"Recording started: {mic['name']}"
         )
 
 
 
-    except Exception as e:
+    except Exception as error:
 
 
-        print(
-            "Microphone error:"
+        logger.error(
+            f"Recording start failed: {error}"
         )
-
-
-        print(e)
-
 
 
         raise Exception(
-            "Could not open microphone."
+            "Could not start microphone recording."
         )
 
 
@@ -295,8 +279,9 @@ def start_meeting(name):
 
 def stop_meeting():
     """
-    Stop recording and save audio.
+    Stop recording and save WAV file.
     """
+
 
     global current_meeting
     global stream
@@ -306,13 +291,16 @@ def stop_meeting():
     if current_meeting is None:
 
         raise Exception(
-            "No active meeting found."
+            "No active meeting."
         )
 
 
 
-    if stream:
 
+    if stream is not None:
+
+
+        # Stop accepting new audio
 
         stream.stop()
 
@@ -323,24 +311,42 @@ def stop_meeting():
 
 
 
+    # Small safety delay
+    # allows final callback data to arrive
 
-    if len(recording) == 0:
+    sd.sleep(200)
 
-        raise Exception(
-            "No audio recorded."
+
+
+
+    with recording_lock:
+
+        if len(recording) == 0:
+
+            raise Exception(
+                "No audio recorded."
+            )
+
+
+        audio_data = np.concatenate(
+            recording,
+            axis=0
         )
 
 
 
+        recording.clear()
 
-    audio_data = np.concatenate(
-        recording,
-        axis=0
+
+
+    timestamp = datetime.now().strftime(
+        "%Y%m%d_%H%M%S"
     )
 
 
-
-    file_path = "temp/meeting.wav"
+    file_path = (
+        f"temp/meeting_{timestamp}.wav"
+    )
 
 
 
@@ -352,11 +358,6 @@ def stop_meeting():
 
 
 
-    current_meeting.audio_file = file_path
-
-
-
-
     duration = (
         len(audio_data)
         /
@@ -365,31 +366,32 @@ def stop_meeting():
 
 
 
+    current_meeting.end_time = datetime.now()
+
+
+
+    # Keep compatibility with your existing code
+    current_meeting.audio_file = file_path
+
+
+
     print(
-        "Audio saved:",
+        "\nAudio Saved:",
         file_path
     )
 
 
     print(
-        "Audio duration:",
+        "Duration:",
         round(duration, 2),
         "seconds"
     )
 
 
 
-    current_meeting.end_time = datetime.now()
-
-
-
     logger.info(
-        "Meeting Stopped"
+        f"Meeting stopped. Audio saved: {file_path}"
     )
-
-
-
-    recording.clear()
 
 
 

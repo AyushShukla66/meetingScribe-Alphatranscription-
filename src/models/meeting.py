@@ -8,3 +8,5 @@ class Meeting:
     end_time: datetime | None = None
     transcript: str = ""
     summary: str = ""
+    
+    
